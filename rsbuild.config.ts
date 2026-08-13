@@ -237,6 +237,7 @@ const appConfig = defineConfig({
                     fs.copyFileSync('./assets/debug-inputs.html', './dist/debug-inputs.html')
                     fs.copyFileSync('./assets/loading-bg.jpg', './dist/loading-bg.jpg')
                     fs.copyFileSync('./assets/mojangles.ttf', './dist/mojangles.ttf')
+                    fs.writeFileSync('./dist/_headers', `/mojangles.ttf\n  Content-Type: font/ttf\n  Access-Control-Allow-Origin: *\n  Cache-Control: public, max-age=31536000, immutable\n/*.wasm\n  Content-Type: application/wasm\n  Access-Control-Allow-Origin: *\n`, 'utf8')
                     if (fs.existsSync('./assets/release.json')) {
                         fs.copyFileSync('./assets/release.json', './dist/release.json')
                     }
