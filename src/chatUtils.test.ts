@@ -82,3 +82,30 @@ test('isAllowedChatCharacter', () => {
     valid: true,
   })
 })
+
+test('formatMessage handles NBT compound and array components', () => {
+  const nbtComponent = [
+    {
+      type: 'compound',
+      value: {
+        extra: {
+          type: 'list',
+          value: {
+            type: 'compound',
+            value: [
+              { color: { type: 'string', value: '#00FF00' }, text: { type: 'string', value: '$ ' } },
+              { color: { type: 'string', value: 'white' }, text: { type: 'string', value: '6.6K' } }
+            ]
+          }
+        },
+        text: { type: 'string', value: '' }
+      }
+    }
+  ]
+
+  const parts = formatMessage(nbtComponent)
+  expect(parts.map(p => p.text).join('')).toBe('$ 6.6K')
+  expect(parts[0].color).toBe('#00FF00')
+  expect(parts[1].color).toBe('white')
+})
+

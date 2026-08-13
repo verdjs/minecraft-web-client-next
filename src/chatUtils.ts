@@ -4,6 +4,9 @@ import { fromFormattedString, TextComponent } from '@xmcl/text-component'
 import type { IndexedData } from 'minecraft-data'
 import { versionToNumber } from 'minecraft-renderer/src/lib/utils'
 
+import mojangson from 'mojangson'
+import nbt from 'prismarine-nbt'
+
 export interface MessageFormatOptions {
   doShadow?: boolean
 }
@@ -35,10 +38,48 @@ type MessageInput = {
 const global = globalThis as any
 
 // todo move to sign-renderer, replace with prismarine-chat, fix mcData issue!
-export const formatMessage = (message: MessageInput, mcData: IndexedData = global.loadedData) => {
+export const formatMessage = (message: MessageInput | any, mcData: IndexedData = global.loadedData) => {
   let msglist: MessageFormatPart[] = []
 
-  const readMsg = (msg: MessageInput) => {
+  const simplifyInput = (input: any) => {
+    if (!input) return input
+    if (typeof input === 'object' && (input.type === 'compound' || input.type === 'list')) {
+      return nbt.simplify(input)
+    }
+    return input
+  }
+
+  const readMsg = (msg: MessageInput | any) => {
+    if (!msg) return
+    msg = simplifyInput(msg)
+    if (Array.isArray(msg)) {
+      for (const item of msg) {
+        readMsg(item)
+      }
+      return
+    }
+
+    if (typeof msg === 'string') {
+      const trimmed = msg.trim()
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          msg = mojangson.simplify(mojangson.parse(trimmed))
+          if (Array.isArray(msg)) {
+            for (const item of msg) readMsg(item)
+            return
+          }
+        } catch {
+          msg = { text: msg }
+        }
+      } else {
+        msg = { text: msg }
+      }
+    }
+
+    if (typeof msg === 'object' && (msg.type === 'compound' || msg.type === 'list')) {
+      msg = nbt.simplify(msg)
+    }
+
     const styles = {
       color: msg.color,
       bold: !!msg.bold,
@@ -52,11 +93,11 @@ export const formatMessage = (message: MessageInput, mcData: IndexedData = globa
     if (msg.text) {
       msglist.push({
         ...msg,
-        text: msg.text,
+        text: String(msg.text),
         ...styles
       })
     } else if (msg.translate) {
-      const tText = mcData?.language[msg.translate] ?? msg.translate
+      const tText = mcData?.language?.[msg.translate] ?? msg.translate
 
       if (msg.with) {
         const splitted = tText.split(/%s|%\d+\$s/g)
@@ -93,11 +134,12 @@ export const formatMessage = (message: MessageInput, mcData: IndexedData = globa
     }
 
     if (msg.extra) {
-      for (let ex of msg.extra) {
+      const extraList = Array.isArray(msg.extra) ? msg.extra : [msg.extra]
+      for (let ex of extraList) {
         if (typeof ex === 'string') {
           ex = { text: ex }
         }
-        readMsg({ ...styles, ...ex })
+        readMsg({ ...styles, ...simplifyInput(ex) })
       }
     }
   }
@@ -110,7 +152,7 @@ export const formatMessage = (message: MessageInput, mcData: IndexedData = globa
 
   msglist = msglist.map(msg => {
     // normalize §
-    if (!msg.text.includes?.('§')) return msg
+    if (typeof msg.text !== 'string' || !msg.text.includes?.('§')) return msg
     const newMsg = fromFormattedString(msg.text)
     return flat(newMsg)
   }).flat(Infinity)

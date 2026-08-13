@@ -17,15 +17,25 @@ const ticksToMs = (ticks: AnimationTimes) => {
 }
 
 const getComponent = (input: string | any) => {
+  if (!input) return input
   if (typeof input === 'string') {
-    // raw json is sent
-    return mojangson.simplify(mojangson.parse(input))
+    const trimmed = input.trim()
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return mojangson.simplify(mojangson.parse(trimmed))
+      } catch {
+        return input
+      }
+    }
+    return input
   } else if (input.type === 'string') {
     // this is used for simple chat components without any special properties
     return { 'text': input.value }
-  } else if (input.type === 'compound') {
+  } else if (input.type === 'compound' || input.type === 'list') {
     // this is used for complex chat components with special properties
     return nbt.simplify(input)
+  } else if (typeof input === 'object' && input.json) {
+    return getComponent(input.json)
   }
   return input
 }
@@ -68,7 +78,7 @@ export default () => {
 
     bot.on('actionBar', (packet) => {
       setAnimTimes({ fadeIn: 0, stay: 2000, fadeOut: 1000 })
-      setActionBar(packet)
+      setActionBar(getComponent(packet))
       setOpenActionBar(true)
     })
 

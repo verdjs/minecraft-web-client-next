@@ -69,12 +69,7 @@ export default () => {
     })
 
     const onRightClickOrUse = () => {
-      const held = bot.heldItem?.name
-      const offhand = bot.inventory?.slots?.[45]?.name
-      const lookingAt = bot.blockAtCursor?.(5)?.name
-      if (held?.includes('sign') || offhand?.includes('sign') || lookingAt?.includes('sign')) {
-        lastSignInteractTime = Date.now()
-      }
+      lastSignInteractTime = Date.now()
     }
 
     bot.on('blockUpdate', (_oldB, newB) => {
@@ -104,18 +99,10 @@ export default () => {
     bot._client.on('open_sign_entity', (packet) => {
       if (!options.autoSignEditor) return
 
-      let blockName = ''
-      try {
-        const block = bot.world?.getBlock?.(new Vec3(packet.location.x, packet.location.y, packet.location.z))
-        blockName = block?.name ?? ''
-      } catch {}
-
-      const isActualSignBlock = blockName.includes('sign')
       const recentlyInteractedSign = Date.now() - lastSignInteractTime < 5000
-      const isRightAfterJoin = Date.now() - lastSpawnTime < 6000
 
-      // If sent on join without the player placing/interacting with a sign, or for a non-sign block without interaction, suppress the popup
-      if ((isRightAfterJoin || !isActualSignBlock) && !recentlyInteractedSign) {
+      // Only open sign editor if the player recently placed/right-clicked a sign; otherwise silently acknowledge to avoid server join/lobby prompts
+      if (!recentlyInteractedSign) {
         bot._client.write('update_sign', {
           location: packet.location,
           isFrontText: (packet as any).isFrontText ?? true,
