@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState, useRef } from 'react'
+import { Vec3 } from 'vec3'
 import { showModal, hideModal } from '../globalState'
 import { options } from '../optionsStorage'
 import { useIsModalActive } from './utilsApp'
@@ -15,6 +16,9 @@ const isWysiwyg = async () => {
   }
   return false
 }
+
+let lastSpawnTime = Date.now()
+let lastSignInteractTime = 0
 
 export default () => {
   const [location, setLocation] = useState<{ x: number, y: number, z: number } | null>(null)
@@ -58,10 +62,73 @@ export default () => {
   }
 
   useMemo(() => {
+    lastSpawnTime = Date.now()
+
+    bot.on('spawn', () => {
+      lastSpawnTime = Date.now()
+    })
+
+    const onRightClickOrUse = () => {
+      const held = bot.heldItem?.name
+      const offhand = bot.inventory?.slots?.[45]?.name
+      const lookingAt = bot.blockAtCursor?.(5)?.name
+      if (held?.includes('sign') || offhand?.includes('sign') || lookingAt?.includes('sign')) {
+        lastSignInteractTime = Date.now()
+      }
+    }
+
+    bot.on('blockUpdate', (_oldB, newB) => {
+      if (newB?.name?.includes('sign')) {
+        lastSignInteractTime = Date.now()
+      }
+    })
+
+    bot.on('startUsingItem', (item) => {
+      if (item?.name?.includes('sign')) {
+        lastSignInteractTime = Date.now()
+      }
+    })
+
+    customEvents.on('activateItem', (item) => {
+      if (item?.name?.includes('sign')) {
+        lastSignInteractTime = Date.now()
+      }
+    })
+
+    window.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
+        onRightClickOrUse()
+      }
+    })
+
     bot._client.on('open_sign_entity', (packet) => {
       if (!options.autoSignEditor) return
+
+      let blockName = ''
+      try {
+        const block = bot.world?.getBlock?.(new Vec3(packet.location.x, packet.location.y, packet.location.z))
+        blockName = block?.name ?? ''
+      } catch {}
+
+      const isActualSignBlock = blockName.includes('sign')
+      const recentlyInteractedSign = Date.now() - lastSignInteractTime < 5000
+      const isRightAfterJoin = Date.now() - lastSpawnTime < 6000
+
+      // If sent on join without the player placing/interacting with a sign, or for a non-sign block without interaction, suppress the popup
+      if ((isRightAfterJoin || !isActualSignBlock) && !recentlyInteractedSign) {
+        bot._client.write('update_sign', {
+          location: packet.location,
+          isFrontText: (packet as any).isFrontText ?? true,
+          text1: '',
+          text2: '',
+          text3: '',
+          text4: ''
+        })
+        return
+      }
+
       setIsFrontText((packet as any).isFrontText ?? true)
-      setLocation(prev => packet.location)
+      setLocation(packet.location)
       showModal({ reactType: 'signs-editor-screen' })
       if (options.wysiwygSignEditor === 'auto') {
         void isWysiwyg().then((value) => {

@@ -36,6 +36,7 @@ type PossibleItemProps = {
 export const getItemMetadata = (item: GeneralInputItem, resourcesManager: ResourcesManagerCommon) => {
   let customText = undefined as string | any | undefined
   let customModel = undefined as string | undefined
+  let lore = undefined as any[] | undefined
 
   let itemId = item.name
   if (!itemId.includes(':')) {
@@ -51,7 +52,13 @@ export const getItemMetadata = (item: GeneralInputItem, resourcesManager: Resour
 
     const customTextComponent = componentMap.get('custom_name') || componentMap.get('item_name')
     if (customTextComponent) {
-      customText = typeof customTextComponent.data === 'string' ? customTextComponent.data : nbt.simplify(customTextComponent.data)
+      if (typeof customTextComponent.data === 'string') {
+        customText = customTextComponent.data
+      } else if (customTextComponent.data?.type === 'compound' || customTextComponent.data?.type === 'list') {
+        customText = nbt.simplify(customTextComponent.data)
+      } else {
+        customText = customTextComponent.data
+      }
     }
     const customModelComponent = componentMap.get('item_model')
     if (customModelComponent) {
@@ -76,9 +83,28 @@ export const getItemMetadata = (item: GeneralInputItem, resourcesManager: Resour
     }
     const loreComponent = componentMap.get('lore')
     if (loreComponent) {
-      customText ??= item.displayName ?? item.name
-      // todo test
-      customText += `\n${JSON.stringify(loreComponent.data)}`
+      let rawLore = loreComponent.data
+      if (rawLore?.type === 'list' || rawLore?.type === 'compound') {
+        rawLore = nbt.simplify(rawLore)
+      }
+      if (Array.isArray(rawLore)) {
+        lore = rawLore.map(line => {
+          if (typeof line === 'string') {
+            try {
+              const trimmed = line.trim()
+              if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                return mojangson.simplify(mojangson.parse(trimmed))
+              }
+              return fromFormattedString(trimmed)
+            } catch {
+              return { text: line }
+            }
+          } else if (typeof line === 'object' && line !== null) {
+            return line.type ? nbt.simplify(line) : line
+          }
+          return { text: String(line) }
+        })
+      }
     }
   }
   if (item.nbt) {
@@ -94,7 +120,8 @@ export const getItemMetadata = (item: GeneralInputItem, resourcesManager: Resour
 
   return {
     customText,
-    customModel
+    customModel,
+    lore
   }
 }
 
@@ -107,15 +134,18 @@ export const getItemNameRaw = (item: Pick<import('prismarine-item').Item, 'nbt'>
     if (typeof customText === 'object') {
       return customText
     }
-    const parsed = customText.startsWith('{') && customText.endsWith('}') ? mojangson.simplify(mojangson.parse(customText)) : fromFormattedString(customText)
-    if (parsed.extra) {
-      return parsed as Record<string, any>
-    } else {
-      return parsed as MessageFormatPart
+    const trimmed = String(customText).trim()
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      const parsed = mojangson.simplify(mojangson.parse(trimmed))
+      if (typeof parsed === 'object' && parsed !== null) {
+        return parsed
+      }
+      return fromFormattedString(String(parsed))
     }
+    return fromFormattedString(trimmed)
   } catch (err) {
     return {
-      text: JSON.stringify(customText)
+      text: String(customText)
     }
   }
 }
