@@ -128,9 +128,9 @@ const processChunkLoadQueue = () => {
   }
 
   const startTime = performance.now()
-  // Responsive budget: up to 6 chunks or 3.5ms per frame to render fast without clear holes or fps drops
-  const MAX_FRAME_BUDGET_MS = isGameLoaded ? 3.5 : 25.0
-  const MAX_CHUNKS_PER_BATCH = isGameLoaded ? 6 : 50
+  // High-performance smooth budget: 2 chunks or 2.0ms per frame during gameplay (120 chunks/sec) to lock 60 FPS with zero stutter
+  const MAX_FRAME_BUDGET_MS = isGameLoaded ? 2.0 : 25.0
+  const MAX_CHUNKS_PER_BATCH = isGameLoaded ? 2 : 50
   let processed = 0
 
   for (const task of tasks) {
