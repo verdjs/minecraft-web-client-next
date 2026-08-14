@@ -7,40 +7,42 @@ Write-Host "==================================================" -ForegroundColor
 # 1. Refresh PATH from registry
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
 
-# 2. Locate CMake
+# 2. Locate Windows SDK & MSVC CRT libraries if available
+$sdkLibDir = $null
+$sdkIncludeDir = $null
+$windowsKitsLib = "C:\Program Files (x86)\Windows Kits\10\Lib"
+if (Test-Path $windowsKitsLib) {
+    $latestVersion = Get-ChildItem -Path $windowsKitsLib -Directory | Sort-Object Name -Descending | Select-Object -First 1
+    if ($latestVersion) {
+        $sdkLibDir = "$windowsKitsLib\$($latestVersion.Name)\um\arm64;$windowsKitsLib\$($latestVersion.Name)\ucrt\arm64;$windowsKitsLib\$($latestVersion.Name)\um\x64;$windowsKitsLib\$($latestVersion.Name)\ucrt\x64"
+        $env:LIB = "$sdkLibDir;" + $env:LIB
+    }
+}
+
+# 3. Locate CMake
 $cmakePath = $null
 $cmd = Get-Command cmake -ErrorAction SilentlyContinue
-if ($cmd) {
-    $cmakePath = $cmd.Source
-}
+if ($cmd) { $cmakePath = $cmd.Source }
 
 if (-not $cmakePath) {
     $vsCmakePaths = @(
         "C:\Program Files\CMake\bin\cmake.exe",
-        "C:\Program Files (x86)\CMake\bin\cmake.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
-        "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
+        "C:\Program Files (x86)\CMake\bin\cmake.exe"
     )
-
     foreach ($p in $vsCmakePaths) {
-        if (Test-Path $p) {
-            $cmakePath = $p
-            break
-        }
+        if (Test-Path $p) { $cmakePath = $p; break }
     }
 }
 
 if (-not $cmakePath) {
-    Write-Host "`nError: CMake could not be found. Please restart PowerShell and re-run." -ForegroundColor Red
-    exit 1
+    Write-Host "[+] Installing CMake via winget..." -ForegroundColor Green
+    winget install -e --id Kitware.CMake --accept-source-agreements --accept-package-agreements
+    $env:Path = "C:\Program Files\CMake\bin;" + $env:Path
+    $cmd = Get-Command cmake -ErrorAction SilentlyContinue
+    if ($cmd) { $cmakePath = $cmd.Source }
 }
 
-Write-Host "[+] Found CMake: $cmakePath" -ForegroundColor Green
-
-# 3. Locate Clang / LLVM and Ninja
+# 4. Locate Clang & Ninja
 $clangPath = $null
 $clangCmd = Get-Command clang++.exe -ErrorAction SilentlyContinue
 if ($clangCmd) { $clangPath = $clangCmd.Source }
@@ -48,15 +50,10 @@ if ($clangCmd) { $clangPath = $clangCmd.Source }
 if (-not $clangPath) {
     $knownClangPaths = @(
         "C:\Program Files\LLVM\bin\clang++.exe",
-        "C:\Program Files (x86)\LLVM\bin\clang++.exe",
-        "$env:LOCALAPPDATA\Programs\LLVM\bin\clang++.exe"
+        "C:\Program Files (x86)\LLVM\bin\clang++.exe"
     )
     foreach ($p in $knownClangPaths) {
-        if (Test-Path $p) {
-            $clangPath = $p
-            $env:Path = (Split-Path -Parent $p) + ";" + $env:Path
-            break
-        }
+        if (Test-Path $p) { $clangPath = $p; break }
     }
 }
 
@@ -66,56 +63,47 @@ if ($ninjaCmd) { $ninjaPath = $ninjaCmd.Source }
 
 if (-not $ninjaPath) {
     $ninjaSearch = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter "ninja.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($ninjaSearch) {
-        $ninjaPath = $ninjaSearch.FullName
-        $env:Path = (Split-Path -Parent $ninjaPath) + ";" + $env:Path
-    } else {
-        $knownNinjaPaths = @(
-            "C:\Program Files\Ninja\ninja.exe",
-            "C:\ProgramData\chocolatey\bin\ninja.exe"
-        )
-        foreach ($p in $knownNinjaPaths) {
-            if (Test-Path $p) {
-                $ninjaPath = $p
-                $env:Path = (Split-Path -Parent $p) + ";" + $env:Path
-                break
-            }
-        }
-    }
+    if ($ninjaSearch) { $ninjaPath = $ninjaSearch.FullName }
 }
 
-# 4. Resolve UNC Path by building on local C: drive to bypass Windows CMD.EXE UNC limitation
+# 5. Check if Windows SDK / CRT is missing
+if (-not (Test-Path $windowsKitsLib) -and -not (Test-Path "C:\Program Files\Microsoft Visual Studio\2022")) {
+    Write-Host "`n[!] Windows C++ SDK libraries (kernel32.lib / CRT) are missing." -ForegroundColor Yellow
+    Write-Host "Installing Windows 10/11 SDK via winget..." -ForegroundColor Green
+    winget install -e --id Microsoft.WindowsSDK.10.0.22621 --accept-source-agreements --accept-package-agreements
+}
+
+# 6. Local Windows build directory on C:
 $rawScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $sourceDir = $rawScriptDir
-
-# Local Windows build directory on C: drive (fast & prevents UNC error)
 $localBuildDir = "C:\Users\$env:USERNAME\mc-native-build"
+
 if (Test-Path $localBuildDir) {
     Remove-Item -Recurse -Force $localBuildDir -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Path $localBuildDir | Out-Null
 
 Write-Host "[+] Source Directory: $sourceDir" -ForegroundColor White
-Write-Host "[+] Local C: Build Directory: $localBuildDir" -ForegroundColor White
+Write-Host "[+] Local Build Directory: $localBuildDir" -ForegroundColor White
 
-# 5. Configure with CMake
+# 7. Configure with CMake
 $built = $false
 
 if ($clangPath -and $ninjaPath) {
     $cCompiler = $clangPath.Replace("clang++.exe", "clang.exe")
-    Write-Host "`n[+] Configuring build with LLVM Clang & Ninja on C: drive..." -ForegroundColor Green
+    Write-Host "`n[+] Configuring build with LLVM Clang & Ninja..." -ForegroundColor Green
     
     & $cmakePath -S "$sourceDir" -B "$localBuildDir" -G "Ninja" "-DCMAKE_C_COMPILER=$cCompiler" "-DCMAKE_CXX_COMPILER=$clangPath" "-DCMAKE_MAKE_PROGRAM=$ninjaPath" -DCMAKE_BUILD_TYPE=Release
     
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "`n[+] Compiling Minecraft Native with Ninja..." -ForegroundColor Cyan
+        Write-Host "`n[+] Compiling Minecraft Native..." -ForegroundColor Cyan
         & $ninjaPath -C "$localBuildDir"
         if ($LASTEXITCODE -eq 0) { $built = $true }
     }
 }
 
 if (-not $built) {
-    Write-Host "`n[+] Configuring with Visual Studio generator on C: drive..." -ForegroundColor Cyan
+    Write-Host "`n[+] Trying Visual Studio build..." -ForegroundColor Cyan
     & $cmakePath -S "$sourceDir" -B "$localBuildDir" -A ARM64
     if ($LASTEXITCODE -ne 0) {
         & $cmakePath -S "$sourceDir" -B "$localBuildDir"
@@ -124,7 +112,7 @@ if (-not $built) {
     if ($LASTEXITCODE -eq 0) { $built = $true }
 }
 
-# 6. Copy output binary back to native-client/build
+# 8. Copy binary back
 if ($built) {
     $outputExe = $null
     $possibleExes = @(
@@ -148,5 +136,10 @@ if ($built) {
         Start-Process (Join-Path $destBuildDir "MinecraftNative.exe")
     }
 } else {
-    Write-Host "`n[!] Build failed. Please inspect CMake output above." -ForegroundColor Red
+    Write-Host "`n==================================================" -ForegroundColor Red
+    Write-Host "  WINDOWS SDK REQUIRED                            " -ForegroundColor Red
+    Write-Host "==================================================" -ForegroundColor Red
+    Write-Host "Clang requires Windows system libraries (kernel32.lib)." -ForegroundColor Yellow
+    Write-Host "Run this command in PowerShell to install the Windows C++ SDK:" -ForegroundColor White
+    Write-Host "  winget install -e --id Microsoft.VisualStudio.2022.BuildTools --override `"--passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended`"" -ForegroundColor Cyan
 }
