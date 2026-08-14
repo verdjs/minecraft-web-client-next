@@ -62,14 +62,17 @@ function updateMobAnimations () {
       state.limbSwing += horizontalDist * 4.0
     }
 
-    const swing = state.limbSwing
-    const amount = Math.min(state.limbSwingAmount / 4.0, 1.0)
-    if (amount <= 0.005) continue
-
     // Find bones in entity mesh
     const bones: Record<string, THREE.Bone> = {}
     entityMesh.traverse((child: any) => {
       if (child.isBone && child.name) {
+        if (!child.userData.bindRot) {
+          child.userData.bindRot = {
+            x: child.rotation.x,
+            y: child.rotation.y,
+            z: child.rotation.z
+          }
+        }
         const cleanName = child.name.replace(/^bone_/, '')
         bones[cleanName] = child
         bones[child.name] = child
@@ -84,25 +87,36 @@ function updateMobAnimations () {
     const arm0 = bones['arm0'] ?? bones['right_arm']
     const arm1 = bones['arm1'] ?? bones['left_arm']
 
+    if (amount <= 0.005) {
+      // Reset bones to initial bind pose when stopped
+      if (leg0?.userData.bindRot) leg0.rotation.x = leg0.userData.bindRot.x
+      if (leg1?.userData.bindRot) leg1.rotation.x = leg1.userData.bindRot.x
+      if (leg2?.userData.bindRot) leg2.rotation.x = leg2.userData.bindRot.x
+      if (leg3?.userData.bindRot) leg3.rotation.x = leg3.userData.bindRot.x
+      if (arm0?.userData.bindRot) arm0.rotation.x = arm0.userData.bindRot.x
+      if (arm1?.userData.bindRot) arm1.rotation.x = arm1.userData.bindRot.x
+      continue
+    }
+
     const isZombie = orig.name?.includes('zombie') || orig.name?.includes('husk') || orig.name?.includes('drowned')
 
-    // Biped / Quadruped leg walking cycles
-    const wave = Math.cos(swing * 0.6662) * 1.4 * amount
-    const waveOpposite = Math.cos(swing * 0.6662 + Math.PI) * 1.4 * amount
+    // Biped / Quadruped leg walking cycles relative to bind pose
+    const wave = Math.cos(swing * 0.6662) * 1.2 * amount
+    const waveOpposite = Math.cos(swing * 0.6662 + Math.PI) * 1.2 * amount
 
-    if (leg0) leg0.rotation.x = wave
-    if (leg1) leg1.rotation.x = waveOpposite
-    if (leg2) leg2.rotation.x = waveOpposite
-    if (leg3) leg3.rotation.x = wave
+    if (leg0?.userData.bindRot) leg0.rotation.x = leg0.userData.bindRot.x + wave
+    if (leg1?.userData.bindRot) leg1.rotation.x = leg1.userData.bindRot.x + waveOpposite
+    if (leg2?.userData.bindRot) leg2.rotation.x = leg2.userData.bindRot.x + waveOpposite
+    if (leg3?.userData.bindRot) leg3.rotation.x = leg3.userData.bindRot.x + wave
 
     if (isZombie) {
       // Zombie arms outstretched forward with subtle oscillation
-      if (arm0) arm0.rotation.x = -Math.PI / 2 + Math.sin(swing * 0.3) * 0.1 * amount
-      if (arm1) arm1.rotation.x = -Math.PI / 2 - Math.sin(swing * 0.3) * 0.1 * amount
+      if (arm0?.userData.bindRot) arm0.rotation.x = -Math.PI / 2 + Math.sin(swing * 0.3) * 0.1 * amount
+      if (arm1?.userData.bindRot) arm1.rotation.x = -Math.PI / 2 - Math.sin(swing * 0.3) * 0.1 * amount
     } else {
-      // Standard biped arm swings
-      if (arm0) arm0.rotation.x = waveOpposite * 0.8
-      if (arm1) arm1.rotation.x = wave * 0.8
+      // Standard biped arm swings relative to bind pose
+      if (arm0?.userData.bindRot) arm0.rotation.x = arm0.userData.bindRot.x + waveOpposite * 0.8
+      if (arm1?.userData.bindRot) arm1.rotation.x = arm1.userData.bindRot.x + wave * 0.8
     }
   }
 

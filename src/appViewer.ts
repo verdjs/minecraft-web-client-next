@@ -108,18 +108,6 @@ interface ChunkLoadTask {
 const pendingChunkLoadMap = new Map<string, ChunkLoadTask>()
 let isChunkQueueScheduled = false
 
-const scheduleChunkProcessing = () => {
-  if (miscUiState.gameLoaded) {
-    if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(() => processChunkLoadQueue(), { timeout: 16 })
-    } else {
-      setTimeout(processChunkLoadQueue, 0)
-    }
-  } else {
-    requestAnimationFrame(processChunkLoadQueue)
-  }
-}
-
 const processChunkLoadQueue = () => {
   if (pendingChunkLoadMap.size === 0) {
     isChunkQueueScheduled = false
@@ -140,10 +128,9 @@ const processChunkLoadQueue = () => {
   }
 
   const startTime = performance.now()
-  // When in loading screen (join/teleport): maximum throughput (up to 50 chunks / 25ms)
-  // When in-game: strictly 1 chunk per tick with a 1.0ms budget to guarantee 60 FPS without any frame drops!
-  const MAX_FRAME_BUDGET_MS = isGameLoaded ? 1.0 : 25
-  const MAX_CHUNKS_PER_BATCH = isGameLoaded ? 1 : 50
+  // Responsive budget: up to 6 chunks or 3.5ms per frame to render fast without clear holes or fps drops
+  const MAX_FRAME_BUDGET_MS = isGameLoaded ? 3.5 : 25.0
+  const MAX_CHUNKS_PER_BATCH = isGameLoaded ? 6 : 50
   let processed = 0
 
   for (const task of tasks) {
@@ -157,7 +144,7 @@ const processChunkLoadQueue = () => {
   }
 
   if (pendingChunkLoadMap.size > 0) {
-    scheduleChunkProcessing()
+    requestAnimationFrame(processChunkLoadQueue)
   } else {
     isChunkQueueScheduled = false
   }
@@ -170,7 +157,7 @@ const enqueueChunkLoad = (pos: Vec3, isLightUpdate = false, reason = 'chunkColum
   pendingChunkLoadMap.set(key, { pos, isLightUpdate: keepLight, reason })
   if (!isChunkQueueScheduled) {
     isChunkQueueScheduled = true
-    scheduleChunkProcessing()
+    requestAnimationFrame(processChunkLoadQueue)
   }
 }
 

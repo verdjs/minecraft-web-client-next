@@ -64,7 +64,7 @@ customEvents.on('gameLoaded', () => {
       window.debugEntityMetadata ??= {}
       window.debugEntityMetadata[e.username] = e
     }
-    if (e.type === 'player' || e.type === 'mob' || e.type === 'animal') {
+    if (e.type === 'player' || e.type === 'mob' || e.type === 'animal' || e.type === 'hostile' || e.type === 'passive' || e.type === 'ambient' || e.type === 'water_creature' || e.type === 'water_ambient') {
       bot.tracker.trackEntity(e)
     }
   }
