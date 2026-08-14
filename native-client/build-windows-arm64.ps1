@@ -1,11 +1,15 @@
-# PowerShell Build Script for Windows ARM64
+# PowerShell Build Script for Windows ARM64 (Compatible with PowerShell 5.1 & PowerShell 7+)
 
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "  Minecraft Native Client - Windows ARM64 Builder  " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor Cyan
 
 # 1. Locate CMake
-$cmakePath = (Get-Command cmake -ErrorAction SilentlyContinue)?.Source
+$cmakePath = $null
+$cmd = Get-Command cmake -ErrorAction SilentlyContinue
+if ($cmd) {
+    $cmakePath = $cmd.Source
+}
 
 if (-not $cmakePath) {
     # Check standard Visual Studio 2022 CMake locations
@@ -34,7 +38,10 @@ if (-not $cmakePath) {
         winget install -e --id Kitware.CMake --accept-source-agreements --accept-package-agreements
         # Refresh PATH in current session
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-        $cmakePath = (Get-Command cmake -ErrorAction SilentlyContinue)?.Source
+        $cmd = Get-Command cmake -ErrorAction SilentlyContinue
+        if ($cmd) {
+            $cmakePath = $cmd.Source
+        }
     } catch {
         Write-Host "Automatic install failed. Please run: winget install Kitware.CMake" -ForegroundColor Red
     }
