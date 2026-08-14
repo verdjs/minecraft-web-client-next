@@ -12,7 +12,6 @@ if ($cmd) {
 }
 
 if (-not $cmakePath) {
-    # Check standard Visual Studio 2022 CMake locations
     $vsCmakePaths = @(
         "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
         "C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
@@ -33,10 +32,8 @@ if (-not $cmakePath) {
 if (-not $cmakePath) {
     Write-Host "`n[!] CMake is not installed or not in PATH." -ForegroundColor Yellow
     Write-Host "Installing CMake automatically via winget..." -ForegroundColor Green
-    
     try {
         winget install -e --id Kitware.CMake --accept-source-agreements --accept-package-agreements
-        # Refresh PATH in current session
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
         $cmd = Get-Command cmake -ErrorAction SilentlyContinue
         if ($cmd) {
@@ -48,13 +45,40 @@ if (-not $cmakePath) {
 }
 
 if (-not $cmakePath) {
-    Write-Host "`nError: CMake could not be found. Please install CMake from https://cmake.org/download/ or run 'winget install Kitware.CMake' and restart PowerShell." -ForegroundColor Red
+    Write-Host "`nError: CMake could not be found. Please install CMake via 'winget install Kitware.CMake' and restart PowerShell." -ForegroundColor Red
     exit 1
 }
 
 Write-Host "`n[+] Found CMake at: $cmakePath" -ForegroundColor Green
 
-# 2. Setup build directory
+# 2. Check for C++ Compiler (MSVC / Clang / GCC)
+$hasCompiler = $false
+if (Get-Command cl -ErrorAction SilentlyContinue) { $hasCompiler = $true }
+if (Get-Command clang++ -ErrorAction SilentlyContinue) { $hasCompiler = $true }
+if (Get-Command g++ -ErrorAction SilentlyContinue) { $hasCompiler = $true }
+
+if (-not $hasCompiler) {
+    # Check if Visual Studio with C++ is installed
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $vswhere) {
+        $vsInstall = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if ($vsInstall) { $hasCompiler = $true }
+    }
+}
+
+if (-not $hasCompiler) {
+    Write-Host "`n[!] No C++ compiler detected on your Windows system." -ForegroundColor Yellow
+    Write-Host "Installing lightweight Clang/LLVM C++ compiler and Ninja builder via winget (fast)..." -ForegroundColor Green
+    try {
+        winget install -e --id LLVM.LLVM --accept-source-agreements --accept-package-agreements
+        winget install -e --id Ninja-build.Ninja --accept-source-agreements --accept-package-agreements
+        $env:Path = "C:\Program Files\LLVM\bin;" + [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    } catch {
+        Write-Host "Automatic compiler install failed." -ForegroundColor Red
+    }
+}
+
+# 3. Setup build directory
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $buildDir = Join-Path $scriptDir "build"
 
@@ -64,23 +88,43 @@ if (-not (Test-Path $buildDir)) {
 
 Set-Location $buildDir
 
-# 3. Configure & Compile for Windows ARM64
-Write-Host "`n[+] Configuring Windows ARM64 Visual Studio build..." -ForegroundColor Cyan
-& $cmakePath -A ARM64 ..
+# 4. Configure & Compile for Windows ARM64
+Write-Host "`n[+] Configuring Windows ARM64 build..." -ForegroundColor Cyan
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[!] Defaulting to standard generator..." -ForegroundColor Yellow
-    & $cmakePath ..
+# Try Ninja + Clang first if available, otherwise Visual Studio ARM64 generator
+$built = $false
+if (Get-Command ninja -ErrorAction SilentlyContinue) {
+    Write-Host "[+] Using Ninja + Clang generator..." -ForegroundColor Green
+    & $cmakePath -G "Ninja" -DCMAKE_BUILD_TYPE=Release ..
+    if ($LASTEXITCODE -eq 0) {
+        & ninja
+        if ($LASTEXITCODE -eq 0) { $built = $true }
+    }
 }
 
-Write-Host "`n[+] Compiling Minecraft Native Release Binary..." -ForegroundColor Cyan
-& $cmakePath --build . --config Release
+if (-not $built) {
+    Write-Host "[+] Trying Visual Studio ARM64 generator..." -ForegroundColor Cyan
+    & $cmakePath -A ARM64 ..
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[!] Defaulting to standard MSVC generator..." -ForegroundColor Yellow
+        & $cmakePath ..
+    }
+    & $cmakePath --build . --config Release
+    if ($LASTEXITCODE -eq 0) { $built = $true }
+}
 
-if ($LASTEXITCODE -eq 0) {
+if ($built) {
     Write-Host "`n==================================================" -ForegroundColor Green
     Write-Host "  SUCCESS! Built MinecraftNative.exe (ARM64)      " -ForegroundColor Green
     Write-Host "==================================================" -ForegroundColor Green
-    Write-Host "Executable location: $buildDir\Release\MinecraftNative.exe" -ForegroundColor White
+    Write-Host "Executable location: $buildDir\Release\MinecraftNative.exe (or $buildDir\MinecraftNative.exe)" -ForegroundColor White
 } else {
-    Write-Host "`n[!] Build failed. Ensure Visual Studio with C++ desktop tools is installed." -ForegroundColor Red
+    Write-Host "`n==================================================" -ForegroundColor Red
+    Write-Host "  COMPILER SETUP REQUIRED                         " -ForegroundColor Red
+    Write-Host "==================================================" -ForegroundColor Red
+    Write-Host "To finish setting up C++ compilation on Windows:" -ForegroundColor Yellow
+    Write-Host "Run this command in PowerShell to install the C++ build tools:" -ForegroundColor White
+    Write-Host "  winget install -e --id LLVM.LLVM" -ForegroundColor Cyan
+    Write-Host "  winget install -e --id Ninja-build.Ninja" -ForegroundColor Cyan
+    Write-Host "Or install Visual Studio Community with 'Desktop development with C++'." -ForegroundColor White
 }
