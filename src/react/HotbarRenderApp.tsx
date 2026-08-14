@@ -12,7 +12,7 @@ import {
 } from 'minecraft-inventory/src'
 import { activeModalStack, miscUiState } from '../globalState'
 import { useAppScale } from '../scaleInterface'
-import { getItemNameRaw } from '../mineflayer/items'
+import { getItemNameRaw, getItemLoreRaw } from '../mineflayer/items'
 import { isInRealGameSession } from '../utils'
 import { openPlayerInventory } from '../inventoryWindows'
 import MessageFormattedString from './MessageFormattedString'
@@ -24,6 +24,7 @@ export const BASE_HOTBAR_HEIGHT = 25
 const ItemName = ({ itemKey }: { itemKey: string }) => {
   const [show, setShow] = useState(false)
   const [itemName, setItemName] = useState<Record<string, any> | string>('')
+  const [itemLore, setItemLore] = useState<any[]>([])
 
   const duration = 0.3
 
@@ -35,6 +36,10 @@ const ItemName = ({ itemKey }: { itemKey: string }) => {
     fontSize: 10,
     textAlign: 'center',
     pointerEvents: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
   }
 
   useEffect(() => {
@@ -46,8 +51,11 @@ const ItemName = ({ itemKey }: { itemKey: string }) => {
       } else {
         setItemName(item.displayName)
       }
+      const lore = getItemLoreRaw(item, appViewer.resourcesManager)
+      setItemLore(lore ?? [])
     } else {
       setItemName('')
+      setItemLore([])
     }
     setShow(true)
     const id = setTimeout(() => {
@@ -72,6 +80,11 @@ const ItemName = ({ itemKey }: { itemKey: string }) => {
             className='item-display-name'
           >
             <MessageFormattedString message={itemName} />
+            {itemLore.map((line, i) => (
+              <div key={i} style={{ fontSize: '0.85em', opacity: 0.9 }}>
+                <MessageFormattedString message={line} fallbackColor='#55FF55' />
+              </div>
+            ))}
           </motion.div>
         </SharedHudVars>
       )}

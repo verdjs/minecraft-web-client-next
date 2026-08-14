@@ -99,25 +99,67 @@ subscribe(activeModalStack, modalStackUpdateChecks)
 /** Chunks that received `update_light` before worldView finished the initial load. */
 const pendingUpdateLightRelight = new Set<string>()
 
-/** Smooth chunk load queue to prevent main-thread lag spikes when crossing chunk boundaries */
-const chunkLoadQueue: Array<{ pos: Vec3, isLightUpdate?: boolean, reason: string }> = []
+interface ChunkLoadTask {
+  pos: Vec3
+  isLightUpdate?: boolean
+  reason: string
+}
+
+const pendingChunkLoadMap = new Map<string, ChunkLoadTask>()
 let isChunkQueueScheduled = false
 
 const processChunkLoadQueue = () => {
-  if (chunkLoadQueue.length === 0) {
+  if (pendingChunkLoadMap.size === 0) {
     isChunkQueueScheduled = false
     return
   }
+
+  const botPos = (globalThis as any).bot?.entity?.position
+  const viewDistance = appViewer.worldView?.viewDistance ?? 8
+  const maxDistanceBlocks = (viewDistance + 4) * 16
+
+  // Purge out-of-range tasks if player moved far away
+  if (botPos) {
+    for (const [key, task] of pendingChunkLoadMap.entries()) {
+      const dx = Math.abs(botPos.x - task.pos.x)
+      const dz = Math.abs(botPos.z - task.pos.z)
+      if (dx > maxDistanceBlocks || dz > maxDistanceBlocks) {
+        pendingChunkLoadMap.delete(key)
+      }
+    }
+  }
+
+  if (pendingChunkLoadMap.size === 0) {
+    isChunkQueueScheduled = false
+    return
+  }
+
+  // Sort tasks: load nearest chunks to player first
+  const tasks = Array.from(pendingChunkLoadMap.values())
+  if (botPos && tasks.length > 1) {
+    tasks.sort((a, b) => {
+      const distA = Math.hypot(a.pos.x - botPos.x, a.pos.z - botPos.z)
+      const distB = Math.hypot(b.pos.x - botPos.x, b.pos.z - botPos.z)
+      return distA - distB
+    })
+  }
+
   const startTime = performance.now()
-  const MAX_FRAME_BUDGET_MS = 5
-  while (chunkLoadQueue.length > 0) {
-    const task = chunkLoadQueue.shift()!
+  // Budget: at most 2.5ms or 1-2 chunks per frame to prevent stuttering/freezing
+  const MAX_FRAME_BUDGET_MS = 2.5
+  let processed = 0
+
+  for (const task of tasks) {
+    const key = `${task.pos.x},${task.pos.z}`
+    pendingChunkLoadMap.delete(key)
     void appViewer.worldView?.loadChunk(task.pos, task.isLightUpdate ?? false, task.reason)
-    if (performance.now() - startTime >= MAX_FRAME_BUDGET_MS) {
+    processed++
+    if (processed >= 2 || performance.now() - startTime >= MAX_FRAME_BUDGET_MS) {
       break
     }
   }
-  if (chunkLoadQueue.length > 0) {
+
+  if (pendingChunkLoadMap.size > 0) {
     requestAnimationFrame(processChunkLoadQueue)
   } else {
     isChunkQueueScheduled = false
@@ -125,7 +167,10 @@ const processChunkLoadQueue = () => {
 }
 
 const enqueueChunkLoad = (pos: Vec3, isLightUpdate = false, reason = 'chunkColumnLoad') => {
-  chunkLoadQueue.push({ pos, isLightUpdate, reason })
+  const key = `${pos.x},${pos.z}`
+  const existing = pendingChunkLoadMap.get(key)
+  const keepLight = existing ? (existing.isLightUpdate && isLightUpdate) : isLightUpdate
+  pendingChunkLoadMap.set(key, { pos, isLightUpdate: keepLight, reason })
   if (!isChunkQueueScheduled) {
     isChunkQueueScheduled = true
     requestAnimationFrame(processChunkLoadQueue)

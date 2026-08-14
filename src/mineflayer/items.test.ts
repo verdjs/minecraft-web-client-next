@@ -88,4 +88,39 @@ describe('getItemMetadata and getItemNameRaw', () => {
       text: 'Magic Wand'
     })
   })
+
+  it('correctly extracts legacy NBT Lore and formats price in green', () => {
+    const mockItem = {
+      name: 'cooked_beef',
+      nbt: {
+        type: 'compound',
+        value: {
+          display: {
+            type: 'compound',
+            value: {
+              Lore: {
+                type: 'list',
+                value: {
+                  type: 'string',
+                  value: ['$ 12.5K', 'Freshly grilled']
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const metadata = getItemMetadata(mockItem as any, {} as any)
+    expect(metadata.lore).toBeDefined()
+    expect(metadata.lore?.length).toBe(2)
+    expect(metadata.lore?.[0]).toEqual({
+      text: '$ 12.5K',
+      color: '#55FF55'
+    })
+    expect(metadata.lore?.[1]).toEqual({
+      text: 'Freshly grilled'
+    })
+  })
 })
+

@@ -1,9 +1,9 @@
 import type { ItemStack, BlockTextureRender } from 'minecraft-inventory/src/types'
-import { flat } from '@xmcl/text-component'
+import { flat, toFormattedString } from '@xmcl/text-component'
 import PItem from 'prismarine-item'
 import type { Item } from 'prismarine-item'
 import { renderSlot } from 'minecraft-renderer/src/three/renderSlot'
-import { getItemModelName, getItemNameRaw, RenderItem } from '../../mineflayer/items'
+import { getItemModelName, getItemNameRaw, getItemMetadata, RenderItem } from '../../mineflayer/items'
 import { inventoryBundledConfig } from './inventoryTexturesConfig'
 
 // ----- Atlas sprite extraction (for item textures with resource pack support) -----
@@ -149,10 +149,32 @@ export function buildItemMapper (version: string) {
         ? flat(nameRaw).map((p: any) => (typeof p === 'string' ? p : p.text)).join('')
         : slot.displayName
 
+      const { lore: rawLore } = getItemMetadata(slot, appViewer.resourcesManager)
+      let lore: string[] | undefined
+      if (rawLore && rawLore.length > 0) {
+        lore = rawLore.map((line: any) => {
+          if (typeof line === 'string') {
+            if (/^\s*\$|value|price|coins|worth/i.test(line) && !line.includes('§')) {
+              return `§a${line}`
+            }
+            return line
+          }
+          if (line && typeof line === 'object') {
+            try {
+              return toFormattedString(line)
+            } catch {
+              return line.text ? String(line.text) : JSON.stringify(line)
+            }
+          }
+          return String(line)
+        })
+      }
+
       return {
         ...mapped,
         name: slot.name,
         displayName,
+        lore,
         texture,
         blockTexture,
         durability: (typeof slot.maxDurability === 'number' && typeof slot.durabilityUsed === 'number')

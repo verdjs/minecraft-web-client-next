@@ -852,6 +852,7 @@ export async function connect (connectOptions: ConnectOptions) {
 
       initMotionTracking()
 
+      let lastWorldViewPos: Vec3 | null = null
       // Bot position callback
       const botPosition = (instant = false) => {
         appViewer.lastCamUpdate = Date.now()
@@ -861,7 +862,11 @@ export async function connect (connectOptions: ConnectOptions) {
           bot.entity.pitch,
           { movementMode: getCameraMovementMode(bot), instant },
         )
-        void appViewer.worldView?.updatePosition(bot.entity.position)
+        const curPos = bot.entity.position
+        if (instant || !lastWorldViewPos || Math.abs(curPos.x - lastWorldViewPos.x) >= 1 || Math.abs(curPos.z - lastWorldViewPos.z) >= 1 || Math.abs(curPos.y - lastWorldViewPos.y) >= 1) {
+          lastWorldViewPos = curPos.clone()
+          void appViewer.worldView?.updatePosition(curPos, instant)
+        }
       }
       bot.on('move', () => botPosition())
       bot.on('forcedMove', () => botPosition(true))

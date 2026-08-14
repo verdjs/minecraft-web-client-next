@@ -531,11 +531,17 @@ const Inner = (
     adapter.overwriteWarps(newWarps)
   }
 
+  let updateMapScheduled = false
   const updateMap = () => {
-    if (!adapter || miscUiState.displayFullmap) return
-    adapter.playerPosition = bot.entity.position
-    adapter.yaw = bot.entity.yaw
-    adapter.emit('updateMap')
+    if (!adapter || miscUiState.displayFullmap || updateMapScheduled) return
+    updateMapScheduled = true
+    requestAnimationFrame(() => {
+      updateMapScheduled = false
+      if (!adapter || miscUiState.displayFullmap) return
+      adapter.playerPosition = bot.entity.position
+      adapter.yaw = bot.entity.yaw
+      adapter.emit('updateMap')
+    })
   }
 
   useEffect(() => {

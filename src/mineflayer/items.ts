@@ -33,6 +33,32 @@ type PossibleItemProps = {
   display?: { Name?: JsonString } // {"text":"Knife","color":"white","italic":"true"}
 }
 
+const formatLoreLine = (line: any): any => {
+  if (line === null || line === undefined) return undefined
+  if (typeof line === 'string') {
+    try {
+      const trimmed = line.trim()
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        return mojangson.simplify(mojangson.parse(trimmed))
+      }
+      if (trimmed.includes('§')) {
+        return fromFormattedString(trimmed)
+      }
+      // Economy / price line without explicit formatting -> highlight in green
+      if (/^\s*\$|value|price|coins|worth/i.test(trimmed)) {
+        return { text: trimmed, color: '#55FF55' }
+      }
+      return { text: trimmed }
+    } catch {
+      return { text: String(line) }
+    }
+  } else if (typeof line === 'object') {
+    const simplified = line.type ? nbt.simplify(line) : line
+    return simplified
+  }
+  return { text: String(line) }
+}
+
 export const getItemMetadata = (item: GeneralInputItem, resourcesManager: ResourcesManagerCommon) => {
   let customText = undefined as string | any | undefined
   let customModel = undefined as string | undefined
@@ -88,30 +114,21 @@ export const getItemMetadata = (item: GeneralInputItem, resourcesManager: Resour
         rawLore = nbt.simplify(rawLore)
       }
       if (Array.isArray(rawLore)) {
-        lore = rawLore.map(line => {
-          if (typeof line === 'string') {
-            try {
-              const trimmed = line.trim()
-              if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                return mojangson.simplify(mojangson.parse(trimmed))
-              }
-              return fromFormattedString(trimmed)
-            } catch {
-              return { text: line }
-            }
-          } else if (typeof line === 'object' && line !== null) {
-            return line.type ? nbt.simplify(line) : line
-          }
-          return { text: String(line) }
-        })
+        lore = rawLore.map(formatLoreLine).filter(Boolean)
       }
     }
   }
   if (item.nbt) {
-    const itemNbt: PossibleItemProps = nbt.simplify(item.nbt)
+    const itemNbt: PossibleItemProps & Record<string, any> = nbt.simplify(item.nbt)
     const customName = itemNbt.display?.Name
     if (customName) {
       customText = customName
+    }
+    if (!lore) {
+      const nbtLore = itemNbt.display?.Lore ?? itemNbt.Lore
+      if (Array.isArray(nbtLore)) {
+        lore = nbtLore.map(formatLoreLine).filter(Boolean)
+      }
     }
     if (customModelDataDefinitions && itemNbt.CustomModelData && customModelDataDefinitions[itemNbt.CustomModelData]) {
       customModel = customModelDataDefinitions[itemNbt.CustomModelData]
@@ -123,6 +140,12 @@ export const getItemMetadata = (item: GeneralInputItem, resourcesManager: Resour
     customModel,
     lore
   }
+}
+
+export const getItemLoreRaw = (item: Pick<import('prismarine-item').Item, 'nbt'> | null, resourcesManager: ResourcesManagerCommon): any[] => {
+  if (!item) return []
+  const { lore } = getItemMetadata(item as GeneralInputItem, resourcesManager)
+  return lore ?? []
 }
 
 
