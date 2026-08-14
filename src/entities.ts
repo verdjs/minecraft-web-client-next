@@ -14,7 +14,10 @@ import {
   clearLocalPlayerAnimationCache,
   processMovementAnimations,
 } from './entityMovementAnimationPipeline'
+import { initEatingAnimation } from './eatingAnimation'
+import { initMobAnimations } from './mobAnimations'
 
+let animationsInitialized = false
 
 const updateAutoJump = () => {
   if (!bot?.autoJumper) return
@@ -49,12 +52,19 @@ customEvents.on('gameLoaded', () => {
   bot.loadPlugin(autoJumpPlugin)
   updateAutoJump()
 
+  if (!animationsInitialized) {
+    animationsInitialized = true
+    initEatingAnimation()
+    initMobAnimations()
+  }
+
   const playerPerAnimation = {} as Record<string, string>
   const checkEntityData = (e: Entity) => {
-    if (!e.username) return
-    window.debugEntityMetadata ??= {}
-    window.debugEntityMetadata[e.username] = e
-    if (e.type === 'player') {
+    if (e.username) {
+      window.debugEntityMetadata ??= {}
+      window.debugEntityMetadata[e.username] = e
+    }
+    if (e.type === 'player' || e.type === 'mob' || e.type === 'animal') {
       bot.tracker.trackEntity(e)
     }
   }
