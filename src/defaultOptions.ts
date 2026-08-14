@@ -54,7 +54,7 @@ export const defaultOptions = {
   language: 'auto',
   preciseMouseInput: false,
   // todo ui setting, maybe enable by default?
-  waitForChunksRender: false as 'sp-only' | boolean,
+  waitForChunksRender: true as 'sp-only' | boolean,
   inventoryJei: true as boolean | Array<'creative' | 'survival' | 'adventure' | 'spectator'>,
   inventoryNotes: true as boolean,
   inventoryPlaceholders: false,

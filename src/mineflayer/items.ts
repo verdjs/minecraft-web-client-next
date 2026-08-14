@@ -35,11 +35,23 @@ type PossibleItemProps = {
 
 const formatLoreLine = (line: any): any => {
   if (line === null || line === undefined) return undefined
+  if (typeof line === 'object') {
+    if (line.type === 'compound' || line.type === 'list') {
+      return nbt.simplify(line)
+    }
+    return line
+  }
   if (typeof line === 'string') {
     try {
       const trimmed = line.trim()
       if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-        return mojangson.simplify(mojangson.parse(trimmed))
+        let parsed = mojangson.parse(trimmed)
+        if (parsed && typeof parsed === 'object' && (parsed.type === 'compound' || parsed.type === 'list')) {
+          parsed = nbt.simplify(parsed)
+        } else {
+          parsed = mojangson.simplify(parsed)
+        }
+        return parsed
       }
       if (trimmed.includes('§')) {
         return fromFormattedString(trimmed)
@@ -52,9 +64,6 @@ const formatLoreLine = (line: any): any => {
     } catch {
       return { text: String(line) }
     }
-  } else if (typeof line === 'object') {
-    const simplified = line.type ? nbt.simplify(line) : line
-    return simplified
   }
   return { text: String(line) }
 }

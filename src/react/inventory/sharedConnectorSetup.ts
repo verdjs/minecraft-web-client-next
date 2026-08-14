@@ -4,6 +4,7 @@ import PItem from 'prismarine-item'
 import type { Item } from 'prismarine-item'
 import { renderSlot } from 'minecraft-renderer/src/three/renderSlot'
 import { getItemModelName, getItemNameRaw, getItemMetadata, RenderItem } from '../../mineflayer/items'
+import { formatLoreLineToString } from '../../chatUtils'
 import { inventoryBundledConfig } from './inventoryTexturesConfig'
 
 // ----- Atlas sprite extraction (for item textures with resource pack support) -----
@@ -158,30 +159,7 @@ export function buildItemMapper (version: string) {
       const sourceLore = rawLore ?? (Array.isArray(raw.customLore) ? raw.customLore : undefined)
       let lore: string[] | undefined
       if (sourceLore && sourceLore.length > 0) {
-        lore = sourceLore.map((line: any) => {
-          if (typeof line === 'string') {
-            if (/^\s*\$|value|price|coins|worth/i.test(line) && !line.includes('§')) {
-              return `§a${line}`
-            }
-            return line
-          }
-          if (line && typeof line === 'object') {
-            try {
-              const formatted = toFormattedString(line)
-              if (/^\s*\$|value|price|coins|worth/i.test(formatted) && !formatted.includes('§')) {
-                return `§a${formatted}`
-              }
-              return formatted
-            } catch {
-              const str = line.text ? String(line.text) : JSON.stringify(line)
-              if (/^\s*\$|value|price|coins|worth/i.test(str) && !str.includes('§')) {
-                return `§a${str}`
-              }
-              return str
-            }
-          }
-          return String(line)
-        })
+        lore = sourceLore.map((line: any) => formatLoreLineToString(line)).filter(Boolean)
       }
 
       return {

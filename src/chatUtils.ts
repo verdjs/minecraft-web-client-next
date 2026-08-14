@@ -168,6 +168,85 @@ export const messageToString = (message: MessageInput | string) => {
   return msglist.map(msg => msg.text).join('')
 }
 
+const COLOR_TO_SECTION_CODE: Record<string, string> = {
+  black: '§0',
+  dark_blue: '§1',
+  dark_green: '§2',
+  dark_aqua: '§3',
+  dark_red: '§4',
+  dark_purple: '§5',
+  gold: '§6',
+  gray: '§7',
+  dark_gray: '§8',
+  blue: '§9',
+  green: '§a',
+  aqua: '§b',
+  red: '§c',
+  light_purple: '§d',
+  yellow: '§e',
+  white: '§f',
+}
+
+export function partsToFormattedSectionString (parts: MessageFormatPart[]): string {
+  let out = ''
+  for (const part of parts) {
+    if (!part.text && part.text !== '') continue
+    let prefix = ''
+    if (part.color) {
+      const lower = String(part.color).toLowerCase().trim()
+      if (COLOR_TO_SECTION_CODE[lower]) {
+        prefix += COLOR_TO_SECTION_CODE[lower]
+      } else if (lower === '#00ff00' || lower === '#55ff55' || lower === '#00aa00' || lower.includes('green')) {
+        prefix += '§a'
+      } else if (lower === '#ffffff' || lower.includes('white')) {
+        prefix += '§f'
+      } else if (lower === '#555555' || lower === '#333333' || lower.includes('dark_gray') || lower.includes('dark-gray')) {
+        prefix += '§8'
+      } else if (lower === '#aaaaaa' || lower.includes('gray')) {
+        prefix += '§7'
+      } else if (lower === '#ffaa00' || lower.includes('gold')) {
+        prefix += '§6'
+      } else if (lower === '#ff5555' || lower.includes('red')) {
+        prefix += '§c'
+      } else if (lower === '#55ffff' || lower.includes('aqua')) {
+        prefix += '§b'
+      } else if (lower === '#5555ff' || lower.includes('blue')) {
+        prefix += '§9'
+      } else if (lower === '#ffff55' || lower.includes('yellow')) {
+        prefix += '§e'
+      } else if (lower === '#ff55ff' || lower.includes('purple')) {
+        prefix += '§d'
+      }
+    }
+    if (part.bold) prefix += '§l'
+    if (part.italic) prefix += '§o'
+    if (part.underlined) prefix += '§n'
+    if (part.strikethrough) prefix += '§m'
+    if (part.obfuscated) prefix += '§k'
+    out += prefix + part.text
+  }
+  return out
+}
+
+export function formatLoreLineToString (line: any): string {
+  if (line === null || line === undefined) return ''
+  const parts = formatMessage(line)
+  if (!parts || parts.length === 0) {
+    if (typeof line === 'string') {
+      if (/^\s*\$|value|price|coins|worth/i.test(line) && !line.includes('§')) {
+        return `§a${line}`
+      }
+      return line
+    }
+    return ''
+  }
+  const formatted = partsToFormattedSectionString(parts)
+  if (/^\s*\$|value|price|coins|worth/i.test(formatted) && !formatted.includes('§')) {
+    return `§a${formatted}`
+  }
+  return formatted || parts.map(p => p.text).join('')
+}
+
 const blockToItemRemaps = {
   water: 'water_bucket',
   lava: 'lava_bucket',

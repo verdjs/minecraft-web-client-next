@@ -115,6 +115,7 @@ const processChunkLoadQueue = () => {
   }
 
   const botPos = (globalThis as any).bot?.entity?.position
+  const isGameLoaded = miscUiState.gameLoaded
 
   // Sort tasks: load nearest chunks to player first
   const tasks = Array.from(pendingChunkLoadMap.values())
@@ -127,8 +128,10 @@ const processChunkLoadQueue = () => {
   }
 
   const startTime = performance.now()
-  // High performance budget: process up to 24 chunks or 10ms per frame to load quickly without frame drops
-  const MAX_FRAME_BUDGET_MS = 10
+  // When not in game yet (initial load/teleport), load as fast as possible (high budget)
+  // When in game, keep a small 3ms budget (max 3-4 chunks per frame) to maintain a solid 60 FPS without frame drops
+  const MAX_FRAME_BUDGET_MS = isGameLoaded ? 3 : 25
+  const MAX_CHUNKS_PER_BATCH = isGameLoaded ? 4 : 50
   let processed = 0
 
   for (const task of tasks) {
@@ -136,7 +139,7 @@ const processChunkLoadQueue = () => {
     pendingChunkLoadMap.delete(key)
     void appViewer.worldView?.loadChunk(task.pos, task.isLightUpdate ?? false, task.reason)
     processed++
-    if (processed >= 24 || performance.now() - startTime >= MAX_FRAME_BUDGET_MS) {
+    if (processed >= MAX_CHUNKS_PER_BATCH || performance.now() - startTime >= MAX_FRAME_BUDGET_MS) {
       break
     }
   }

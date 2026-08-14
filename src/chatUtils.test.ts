@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest'
 import mcData from 'minecraft-data'
-import { formatMessage, isAllowedChatCharacter, isStringAllowed } from './chatUtils'
+import { formatMessage, formatLoreLineToString, isAllowedChatCharacter, isStringAllowed } from './chatUtils'
 
 //@ts-expect-error
 globalThis.loadedData ??= mcData('1.20.1')
@@ -102,10 +102,17 @@ test('formatMessage handles NBT compound and array components', () => {
       }
     }
   ]
-
   const parts = formatMessage(nbtComponent)
   expect(parts.map(p => p.text).join('')).toBe('$ 6.6K')
   expect(parts[0].color).toBe('#00FF00')
   expect(parts[1].color).toBe('white')
 })
+
+test('formatLoreLineToString formats Donut SMP NBT lore line to clean Minecraft section string', () => {
+  const nbtLoreString = '{"type":"compound","value":{"extra":{"type":"list","value":{"type":"compound","value":[{"color":{"type":"string","value":"dark_gray"},"text":{"type":"string","value":""}},{"color":{"type":"string","value":"#00FF00"},"text":{"type":"string","value":"$ "}},{"color":{"type":"string","value":"white"},"text":{"type":"string","value":"1.2K"}}]}},"text":{"type":"string","value":""}}}'
+
+  const formatted = formatLoreLineToString(nbtLoreString)
+  expect(formatted).toBe('§a$ §f1.2K')
+})
+
 
