@@ -73,6 +73,9 @@ export const getItemMetadata = (item: GeneralInputItem, resourcesManager: Resour
   if (item.components) {
     const componentMap = new Map<string, RenderSlotComponent>()
     for (const component of item.components) {
+      if (!component?.type) continue
+      const normalizedType = component.type.replace(/^minecraft:/, '')
+      componentMap.set(normalizedType, component)
       componentMap.set(component.type, component)
     }
 
@@ -113,8 +116,32 @@ export const getItemMetadata = (item: GeneralInputItem, resourcesManager: Resour
       if (rawLore?.type === 'list' || rawLore?.type === 'compound') {
         rawLore = nbt.simplify(rawLore)
       }
+      if (rawLore?.lines) {
+        rawLore = rawLore.lines
+      }
+      if (rawLore?.value) {
+        rawLore = rawLore.value
+      }
       if (Array.isArray(rawLore)) {
         lore = rawLore.map(formatLoreLine).filter(Boolean)
+      }
+    }
+    const customDataComponent = componentMap.get('custom_data')
+    if (customDataComponent?.data) {
+      let customData = customDataComponent.data
+      if (customData?.type === 'compound') {
+        customData = nbt.simplify(customData)
+      }
+      if (typeof customData === 'object' && customData !== null) {
+        if (!customText && (customData.display?.Name || customData.Name)) {
+          customText = customData.display?.Name ?? customData.Name
+        }
+        if (!lore && (customData.display?.Lore || customData.Lore)) {
+          const cLore = customData.display?.Lore ?? customData.Lore
+          if (Array.isArray(cLore)) {
+            lore = cLore.map(formatLoreLine).filter(Boolean)
+          }
+        }
       }
     }
   }

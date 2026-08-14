@@ -131,28 +131,34 @@ export function enrichItemStack (item: ItemStack & { name?: string; nbt?: any; c
 export function buildItemMapper (version: string) {
   const PrismarineItem = PItem(version)
 
-  return (raw: { type: number; count: number; metadata?: number; nbt?: unknown; components?: any[] },
-    mapped: ItemStack): ItemStack => {
+  return (raw: any, mapped: ItemStack): ItemStack => {
     try {
-      const slot = new PrismarineItem(raw.type, raw.count, raw.metadata ?? 0) as Item & RenderItem
-      if (raw.nbt) (slot as any).nbt = raw.nbt
-      if (raw.components) (slot as any).components = raw.components
+      if (!raw) return mapped
+      const slot = (raw instanceof PrismarineItem)
+        ? raw
+        : new PrismarineItem(raw.type, raw.count, raw.metadata ?? 0) as Item & RenderItem
+
+      if (raw.nbt && !(slot as any).nbt) (slot as any).nbt = raw.nbt
+      if (raw.components && !(slot as any).components) (slot as any).components = raw.components
+      if (raw.customName && !(slot as any).customName) (slot as any).customName = raw.customName
+      if (raw.customLore && !(slot as any).customLore) (slot as any).customLore = raw.customLore
 
       const { texture, blockTexture } = resolveItemTextures({
-        name: slot.name,
+        name: slot.name ?? raw.name,
         nbt: (slot as any).nbt,
-        components: raw.components,
+        components: (slot as any).components ?? raw.components,
       })
 
       const nameRaw = getItemNameRaw(slot, appViewer.resourcesManager)
       const displayName = nameRaw
         ? flat(nameRaw).map((p: any) => (typeof p === 'string' ? p : p.text)).join('')
-        : slot.displayName
+        : (slot.displayName ?? raw.displayName)
 
       const { lore: rawLore } = getItemMetadata(slot, appViewer.resourcesManager)
+      const sourceLore = rawLore ?? (Array.isArray(raw.customLore) ? raw.customLore : undefined)
       let lore: string[] | undefined
-      if (rawLore && rawLore.length > 0) {
-        lore = rawLore.map((line: any) => {
+      if (sourceLore && sourceLore.length > 0) {
+        lore = sourceLore.map((line: any) => {
           if (typeof line === 'string') {
             if (/^\s*\$|value|price|coins|worth/i.test(line) && !line.includes('§')) {
               return `§a${line}`
@@ -161,9 +167,17 @@ export function buildItemMapper (version: string) {
           }
           if (line && typeof line === 'object') {
             try {
-              return toFormattedString(line)
+              const formatted = toFormattedString(line)
+              if (/^\s*\$|value|price|coins|worth/i.test(formatted) && !formatted.includes('§')) {
+                return `§a${formatted}`
+              }
+              return formatted
             } catch {
-              return line.text ? String(line.text) : JSON.stringify(line)
+              const str = line.text ? String(line.text) : JSON.stringify(line)
+              if (/^\s*\$|value|price|coins|worth/i.test(str) && !str.includes('§')) {
+                return `§a${str}`
+              }
+              return str
             }
           }
           return String(line)
@@ -172,7 +186,7 @@ export function buildItemMapper (version: string) {
 
       return {
         ...mapped,
-        name: slot.name,
+        name: slot.name ?? raw.name,
         displayName,
         lore,
         texture,

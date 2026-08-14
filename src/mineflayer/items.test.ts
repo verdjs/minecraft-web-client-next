@@ -122,5 +122,37 @@ describe('getItemMetadata and getItemNameRaw', () => {
       text: 'Freshly grilled'
     })
   })
+
+  it('correctly handles 1.21 minecraft:lore and minecraft:custom_name components', () => {
+    const mockItem = {
+      name: 'golden_sword',
+      components: [
+        {
+          type: 'minecraft:custom_name',
+          data: '{"text":"Legendary Blade","color":"gold"}'
+        },
+        {
+          type: 'minecraft:lore',
+          data: [
+            '{"text":"$ 500,000","color":"green"}',
+            'Sharpness X'
+          ]
+        }
+      ]
+    }
+
+    const metadata = getItemMetadata(mockItem as any, {} as any)
+    expect(metadata.customText).toBe('{"text":"Legendary Blade","color":"gold"}')
+    expect(metadata.lore).toBeDefined()
+    expect(metadata.lore?.length).toBe(2)
+    expect(metadata.lore?.[0]).toEqual({
+      text: '$ 500,000',
+      color: 'green'
+    })
+    expect(metadata.lore?.[1]).toEqual({
+      text: 'Sharpness X'
+    })
+  })
 })
+
 

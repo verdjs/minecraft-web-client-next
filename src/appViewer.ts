@@ -115,24 +115,6 @@ const processChunkLoadQueue = () => {
   }
 
   const botPos = (globalThis as any).bot?.entity?.position
-  const viewDistance = appViewer.worldView?.viewDistance ?? 8
-  const maxDistanceBlocks = (viewDistance + 4) * 16
-
-  // Purge out-of-range tasks if player moved far away
-  if (botPos) {
-    for (const [key, task] of pendingChunkLoadMap.entries()) {
-      const dx = Math.abs(botPos.x - task.pos.x)
-      const dz = Math.abs(botPos.z - task.pos.z)
-      if (dx > maxDistanceBlocks || dz > maxDistanceBlocks) {
-        pendingChunkLoadMap.delete(key)
-      }
-    }
-  }
-
-  if (pendingChunkLoadMap.size === 0) {
-    isChunkQueueScheduled = false
-    return
-  }
 
   // Sort tasks: load nearest chunks to player first
   const tasks = Array.from(pendingChunkLoadMap.values())
@@ -145,8 +127,8 @@ const processChunkLoadQueue = () => {
   }
 
   const startTime = performance.now()
-  // Budget: at most 2.5ms or 1-2 chunks per frame to prevent stuttering/freezing
-  const MAX_FRAME_BUDGET_MS = 2.5
+  // High performance budget: process up to 24 chunks or 10ms per frame to load quickly without frame drops
+  const MAX_FRAME_BUDGET_MS = 10
   let processed = 0
 
   for (const task of tasks) {
@@ -154,7 +136,7 @@ const processChunkLoadQueue = () => {
     pendingChunkLoadMap.delete(key)
     void appViewer.worldView?.loadChunk(task.pos, task.isLightUpdate ?? false, task.reason)
     processed++
-    if (processed >= 2 || performance.now() - startTime >= MAX_FRAME_BUDGET_MS) {
+    if (processed >= 24 || performance.now() - startTime >= MAX_FRAME_BUDGET_MS) {
       break
     }
   }
@@ -287,6 +269,7 @@ const connectAppWorldViewToBot = () => {
       appViewer.worldView?.chunkProgress()
     },
     chunkColumnUnload (pos: Vec3) {
+      pendingChunkLoadMap.delete(`${pos.x},${pos.z}`)
       appViewer.worldView?.unloadChunk(pos)
     },
     blockUpdate (oldBlock: any, newBlock: any) {
